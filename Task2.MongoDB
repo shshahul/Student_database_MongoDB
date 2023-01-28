@@ -1,0 +1,176 @@
+!pip install pymongo
+from pymongo import MongoClient
+
+client = MongoClient("enter mongoDB link")
+
+client.list_database_names()
+
+#methods of uploading JSON data
+1)Mondo db Compass we can directly upload by creating the file 
+2)Another method is by using python 
+
+db = client['marks']
+db.list_collection_names()
+
+my_col=db['students_data']
+
+from pprint import pprint
+for i in my_col.find():
+  print(i)
+  
+
+1.Find the student name who scored maximum scores in all (exam, quiz and homework)?
+
+#Find the student name who scored maximum scores in all (exam, quiz and homework)?
+#stage 2 we need to submit (exam, quiz and homework) one by one
+stage1={"$unwind":"$scores"}
+stage2={"$match":{"scores.type":"homework"}}    
+stage3={"$sort":{"scores.score":-1}}
+stage4={"$limit":1}
+stage5={"$project":{"_id":0,"name":1,"scores.score":1,"scores.type":1}}
+for i in my_col.aggregate([stage1,stage2,stage3,stage4,stage5]):
+    pprint(i)
+
+
+2)Find students who scored below average in the exam and pass mark is 40%?
+
+stage1 = {"$unwind":"$scores"}
+stage2={"$match":{"scores.type":"exam"}}
+stage3 = {"$group": {"_id":"$scores.type", "avg_score":{"$avg":"$scores.score"}}}
+for i in my_col.aggregate([stage1,stage2,stage3]):
+    pprint(i)  
+
+
+
+
+stage1 = {"$unwind":"$scores"}
+stage2 = {"$group": {"_id":"$scores.type", "avg_score":{"$avg":"$scores.score"}}}
+for i in my_col.aggregate([stage1,stage2]):
+    pprint(i)
+
+a)Students scored below 40%.
+#in the above cell I calculated the overall average score for ["quiz",'exam','homework']
+
+#Students scored below 40%
+stage1 = {"$unwind":"$scores"}
+stage2 = {"$match":{"scores.score":{"$lt":40},"scores.type":"exam"}}
+stage3 = {"$project":{"_id":0,"name":1,"scores.score":1,"scores.type":1}}
+for i in my_col.aggregate([stage1,stage2,stage3]):
+  print(i)
+
+3)Find students who scored below pass mark and assigned them as fail, and above pass mark as pass in all the categories.
+
+#I am considering below 40 marks as faile and i am adding new column ["Exam_result"] and assigned them as fail
+stage1 = {"$unwind":"$scores"}
+stage2 = {"$match":{"scores.score":{"$lt":40}}}  
+stage4 = {"$addFields":{'Exam_Result':'Fail'}}
+stage3 = {"$project":{"_id":0,"name":1,"scores.score":1,"scores.type":1}}
+
+for i in my_col.aggregate([stage1,stage2,stage3,stage4]):
+
+    pprint(i) 
+
+# I am considering above 40 marks as faile and i am adding new column ["Exam_result"] and assigned them as pass
+stage1 = {"$unwind":"$scores"}
+stage2 = {"$match":{"scores.score":{"$gte":40}}}  
+stage4 = {"$addFields":{'Exam_Result':'Pass'}}
+stage3 = {"$project":{"_id":0,"name":1,"scores.score":1,"scores.type":1}}
+for i in my_col.aggregate([stage1,stage2,stage3,stage4]):
+
+    pprint(i)
+
+
+4)       Find the total and average of the exam, quiz and homework and store them in a separate collection.
+
+#finding the average of the exam, quiz and homework and store them in a separate collection.
+Average =[]
+stage1 = {"$unwind":"$scores"}
+stage2 = {"$group": {"_id":"$scores.type", "avg_score":{"$avg":"$scores.score"}}}
+for i in my_col.aggregate([stage1,stage2]):
+  Average.append(i)
+print(Average)
+
+
+Avg_3scores_col = db.Total_AVG_Score_col
+Avg_3scores_col.insert_many(Average)
+
+##finding  total score of the exam, quiz and homework and store them in a separate collection.
+
+Total_score =[]
+stage1 = {"$unwind":"$scores"}
+stage2 = {"$group": {"_id":"$scores.type", "total_score":{"$sum":"$scores.score"}}}
+for i in my_col.aggregate([stage1,stage2]):
+  Total_score.append(i)
+print(Total_score)
+
+
+#Updating in the separate collection
+total_score_col = db.Total_Scores_collection
+total_score_col.insert_many(Total_score)
+
+
+5)      Create a new collection which consists of students who scored below average and above 40% in all the categories.
+
+data = []
+
+stage1 = {"$unwind":"$scores"}
+stage2 = {"$match":{"scores.score":{"$gte":40,"$lt":48}}}  
+stage4 = {"$addFields":{'Exam_Result':'Pass'}}
+stage3 = {"$project":{"_id":0,"name":1,"scores.score":1,"scores.type":1}}
+for i in my_col.aggregate([stage1,stage2,stage3,stage4]):
+  data.append(i)
+  print(data)
+   
+
+#creating new collection and inserting this collected data
+db = client['marks']
+avg_col = db.avg_student_col_marks
+avg_col.insert_many(data)
+
+6)      Create a new collection which consists of students who scored below the fail mark in all the categories.
+
+Fail_Marks = []
+
+#I am considering below 40 marks as faile and i am adding new column ["Exam_result"] and assigned them as fail
+stage1 = {"$unwind":"$scores"}
+stage2 = {"$match":{"scores.score":{"$lt":40}}}  
+stage4 = {"$addFields":{'Exam_Result':'Fail'}}
+stage3 = {"$project":{"_id":0,"name":1,"scores.score":1,"scores.type":1}}
+
+for i in my_col.aggregate([stage1,stage2,stage3,stage4]):
+  #pprint(i)
+  Fail_Marks.append(i)
+  print(Fail_Marks)
+
+
+fail_mark_col = db.Fail_students_catogery_col
+fail_mark_col.insert_many(Fail_Marks)
+
+#To check the data inserted or not 
+fail_mark_col.find_one()
+
+7)      Create a new collection which consists of students who scored above pass mark in all the categories.
+
+Pass_Students = []
+
+stage1 = {"$unwind":"$scores"}
+stage2 = {"$match":{"scores.score":{"$gte":40}}}  
+stage3 = {"$project":{"_id":0,"name":1,"scores.score":1,"scores.type":1}}
+stage4 = {"$addFields":{'Exam_Result':'Pass'}}
+for i in my_col.aggregate([stage1,stage2,stage3,stage4]):
+  # pprint(i)
+
+  Pass_Students.append(i)
+print(Pass_Students)
+
+
+
+
+
+#Updating in separate collection
+Pass_Students_col = db.Pass_Students_collection
+
+Pass_Students_col.insert_many(Pass_Students)
+
+Pass_Students_col.find_one()
+
